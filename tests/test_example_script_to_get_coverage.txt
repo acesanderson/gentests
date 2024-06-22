@@ -1,0 +1,88 @@
+Sure! In order to test the script, we need to mock certain components like the `chromadb` client and the `argparse` components. Pytest and the `unittest.mock` module in Python will help us achieve this.
+
+Here's the pytest file:
+
+```python
+import pytest
+from unittest.mock import MagicMock, patch
+import random
+import argparse
+import sys
+
+# the script we are testing
+import your_script_name  # Replace 'your_script_name' with the actual name of your script file (without .py)
+
+@pytest.fixture
+def mock_chromadb():
+    with patch('your_script_name.chromadb.PersistentClient') as MockClient:
+        mock_instance = MockClient.return_value
+        mock_instance.get_collection.return_value = mock_instance
+        yield mock_instance
+
+def test_query_papers(mock_chromadb):
+    query = "Prompt engineering for agents"
+    expected_results = {
+        'matches': [f"arxiv_id::{query}::{i}" for i in range(10)],
+        'ids': [[f"arxiv_id::title_{i}" for i in range(10)]]
+    }
+    
+    mock_chromadb.query.return_value = expected_results
+    results = your_script_name.query_papers(query, 10)
+    
+    assert results == expected_results
+    mock_chromadb.query.assert_called_once_with(query_texts=[query], n_results=10)
+
+def test_random_query():
+    query = your_script_name.query
+    assert query in your_script_name.queries
+
+@pytest.mark.parametrize("query, k, expected_queries_called", [
+    ("Prompt engineering for agents", 10, 10),
+    ("Multi-agent reinforcement learning", 5, 5)
+])
+def test_main(mock_chromadb, query, k, expected_queries_called, capsys):
+    testargs = ["prog", query, f"--k={k}"]
+    expected_results = {
+        'matches': [f"arxiv_id::{query}::{i}" for i in range(k)],
+        'ids': [[f"arxiv_id::title_{i}" for i in range(k)]]
+    }
+    
+    with patch.object(sys, 'argv', testargs):
+        mock_chromadb.query.return_value = expected_results
+        your_script_name.__name__ = "__main__"
+        exec(open("your_script_name.py").read()) # Replace 'your_script_name' with your script file actually name
+
+        captured = capsys.readouterr()
+        assert query in captured.out
+        for i in range(k):
+            assert f"title_{i}" in captured.out
+    
+@pytest.fixture(autouse=True)
+def replace_random_choice():
+    with patch('random.choice') as mock_random:
+        mock_random.return_value = "Prompt engineering for agents"
+        yield mock_random
+```
+
+In the above `pytest` file:
+- `mock_chromadb`: Mocks the `chromadb` PersistentClient and its methods.
+- `test_query_papers`: Tests the `query_papers` function with mocked chroma db client and sample return data.
+- `test_random_query`: Tests that the random query selection falls within the predefined queries list.
+- `test_main`: Tests the main function by using `argparse` arguments, mocks, and capturing the output using `capsys`.
+- `replace_random_choice`: Auto-used fixture that replaces `random.choice` with a mock that returns a fixed query to ensure consistent testing results.
+
+You should replace `your_script_name` with the name of the script you want to test, minus the `.py` extension. For example, if your script is named `query_script.py`, you should use:
+
+```python
+import query_script
+``` 
+
+And similarly replace `exec(open("your_script_name.py").read())` with `exec(open("query_script.py").read())`.
+
+Ensure you have `pytest` installed and run the tests using:
+
+```sh
+pytest test_your_script_name.py
+```
+
+Replace `"test_your_script_name.py"` with the actual name of this test file.
